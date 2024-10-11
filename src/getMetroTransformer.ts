@@ -103,6 +103,7 @@ export function maybeTransformMetroResult(
 }
 
 export function generateAndConvert(ast: Node, filename: string): MetroTransformerResult {
+  // @ts-ignore Type mismatch
   let generatorResult = generate(ast, {
     filename: filename,
     retainLines: true,

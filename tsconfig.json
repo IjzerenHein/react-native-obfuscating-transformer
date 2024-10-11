@@ -13,8 +13,8 @@
     "declaration": true,
     "baseUrl": ".",
     "paths": {
-      "javascript-obfuscator": [
-        "typings/javascript-obfuscator.d.ts"
+      "gnirts": [
+        "typings/gnirts.d.ts"
       ]
     },
     "experimentalDecorators": true,
