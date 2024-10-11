@@ -1,4 +1,4 @@
-import * as Obfuscator from "javascript-obfuscator"
+import { obfuscate, ObfuscatorOptions } from "javascript-obfuscator"
 import {
   convertMetroRawSourceMapToStandardSourceMap,
   composeSourceMaps,
@@ -6,34 +6,34 @@ import {
 } from "./composeSourceMaps"
 import { RawSourceMap } from "source-map/source-map"
 
-export function obfuscateCode(
-  code: string,
-  options: Obfuscator.Options,
-): string {
-  return Obfuscator.obfuscate(code, options).getObfuscatedCode()
+export function obfuscateCode(code: string, options: ObfuscatorOptions) {
+  const result = obfuscate(code, options)
+  return {
+    code: result.getObfuscatedCode(),
+  }
 }
 
 export function obfuscateCodePreservingSourceMap(
   code: string,
   map: string | RawSourceMap | MetroRawSourceMap,
-  originlFilename: string,
+  originalFilename: string,
   originalSource: string,
-  options: Obfuscator.Options,
-): { code: string; map: string } {
-  const obfuscationResult = Obfuscator.obfuscate(code, options)
+  options: ObfuscatorOptions,
+) {
+  const obfuscationResult = obfuscate(code, options)
   const obfuscationResultMap = obfuscationResult.getSourceMap()
 
   if (!obfuscationResultMap) {
     throw new Error(
       "javascript-obfuscator did not return a source map for file " +
-        originlFilename,
+        originalFilename,
     )
   }
 
   if (Array.isArray(map)) {
     map = convertMetroRawSourceMapToStandardSourceMap(
       map,
-      originlFilename,
+      originalFilename,
       originalSource,
     )
   }
@@ -43,7 +43,7 @@ export function obfuscateCodePreservingSourceMap(
     map: composeSourceMaps(
       map,
       obfuscationResultMap,
-      originlFilename,
+      originalFilename,
       originalSource,
     ),
   }

@@ -1,7 +1,8 @@
 import * as crypto from "crypto"
 import * as fs from "fs"
 import * as path from "path"
-import * as JavaScriptObfuscator from "javascript-obfuscator"
+import { ObfuscatorOptions } from "javascript-obfuscator"
+import { mangle } from "gnirts"
 import { path as appRootPath } from "app-root-path"
 
 import { getCallerFile } from "./getCallerFile"
@@ -26,29 +27,40 @@ function getOwnCacheKey(upstreamCacheKey: string, configFilename: string) {
   return key.digest("hex")
 }
 
+function emitObfuscatedFile(code: string, filename: string, pre = false) {
+  const emitDir = path.dirname(filename)
+  const obfuscatedFilename = extendFileExtension(
+    path.basename(filename),
+    pre ? "pre-obfuscated" : "obfuscated",
+  )
+  fs.writeFileSync(path.join(emitDir, obfuscatedFilename), code)
+}
+
 export interface ObfuscatingTransformerOptions {
   filter?(filename: string, source: string): boolean
   upstreamTransformer?: MetroTransformer
-  obfuscatorOptions?: JavaScriptObfuscator.Options
+  obfuscatorOptions?: ObfuscatorOptions
   trace?: boolean
   emitObfuscatedFiles?: boolean
+  emitPreObfuscatedFiles?: boolean
   enableInDevelopment?: boolean
 }
 
 const sourceDir = path.join(appRootPath, "src")
 
 export function obfuscatingTransformer({
-  filter = filename => filename.startsWith(sourceDir),
+  filter = (filename) => filename.startsWith(sourceDir),
   upstreamTransformer = getMetroTransformer(),
   obfuscatorOptions: _obfuscatorOptions,
   ...otherOptions
 }: ObfuscatingTransformerOptions): MetroTransformer {
   const callerFilename = getCallerFile()
 
-  const obfuscatorOptions: JavaScriptObfuscator.Options = {
+  const obfuscatorOptions: ObfuscatorOptions = {
     ..._obfuscatorOptions,
     sourceMap: true,
     sourceMapMode: "separate",
+    // Unfortunately, string-array mangling produces incompatible react-native code
     stringArray: false,
   }
 
@@ -67,7 +79,7 @@ export function obfuscatingTransformer({
           console.log("Obfuscating", props.filename)
         }
 
-        const { code, map }: MetroTransformerResult = result.code
+        let { code, map }: MetroTransformerResult = result.code
           ? result
           : result.ast
             ? generateAndConvert(result.ast, props.filename)
@@ -75,31 +87,30 @@ export function obfuscatingTransformer({
 
         if (!code) {
           return result
-        } else if (!map) {
-          return {
-            code: obfuscateCode(code, obfuscatorOptions),
-          }
         }
 
-        if (otherOptions.emitObfuscatedFiles) {
-          const emitDir = path.dirname(props.filename)
-          const filename = extendFileExtension(
-            path.basename(props.filename),
-            "obfuscated",
-          )
-          fs.writeFileSync(path.join(emitDir, filename), code)
+        code = mangle(code)
+
+        if (otherOptions.emitPreObfuscatedFiles)
+          emitObfuscatedFile(code, props.filename, true)
+
+        if (!map) {
+          const obfuscatedResult = obfuscateCode(code, obfuscatorOptions)
+          if (otherOptions.emitObfuscatedFiles)
+            emitObfuscatedFile(obfuscatedResult.code, props.filename)
+          return { code: obfuscatedResult.code }
         }
 
-        return maybeTransformMetroResult(
-          result,
-          obfuscateCodePreservingSourceMap(
-            code,
-            map,
-            props.filename,
-            props.src,
-            obfuscatorOptions,
-          ),
+        const obfuscatedCodeAndMapFile = obfuscateCodePreservingSourceMap(
+          code,
+          map,
+          props.filename,
+          props.src,
+          obfuscatorOptions,
         )
+        if (otherOptions.emitObfuscatedFiles)
+          emitObfuscatedFile(obfuscatedCodeAndMapFile.code, props.filename)
+        return maybeTransformMetroResult(result, obfuscatedCodeAndMapFile)
       }
 
       return result
